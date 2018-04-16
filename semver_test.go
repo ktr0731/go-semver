@@ -20,11 +20,11 @@ func TestSemVer(t *testing.T) {
 		{"0", nil, true},
 	}
 	for _, c := range cases {
-		v, err := New(c.version)
+		v := New(c.version)
 		if c.hasErr {
-			assert.Error(t, err)
+			assert.Error(t, v.Err())
 		} else {
-			assert.NoError(t, err)
+			assert.NoError(t, v.Err())
 			assert.Equal(t, c.expected, v)
 		}
 	}

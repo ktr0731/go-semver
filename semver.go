@@ -13,6 +13,10 @@ type Version struct {
 	err                 error
 }
 
+func (v *Version) Err() error {
+	return v.err
+}
+
 func (v *Version) major(in string) {
 	if v.err != nil {
 		return
@@ -34,18 +38,20 @@ func (v *Version) patch(in string) {
 	v.Patch, v.err = toInt(in)
 }
 
-func New(in string) (*Version, error) {
+func New(in string) *Version {
+	v := &Version{}
+
 	sp := strings.Split(in, ".")
 	if len(sp) != 3 {
-		return nil, errors.Errorf("passed string is not following to semver: %s", in)
+		v.err = errors.Errorf("passed string is not following to semver: %s", in)
+		return v
 	}
 
-	v := &Version{}
 	v.major(sp[0])
 	v.minor(sp[1])
 	v.patch(sp[2])
 
-	return v, v.err
+	return v
 }
 
 func (v *Version) String() string {
