@@ -10,34 +10,59 @@ import (
 
 type Version struct {
 	Major, Minor, Patch int
+	err                 error
 }
 
-func New(v string) (*Version, error) {
-	sp := strings.Split(v, ".")
-	if len(sp) < 3 {
-		return nil, errors.Errorf("passed string is not following to semver: %s", v)
+func (v *Version) major(in string) {
+	if v.err != nil {
+		return
+	}
+	v.Major, v.err = toInt(in)
+}
+
+func (v *Version) minor(in string) {
+	if v.err != nil {
+		return
+	}
+	v.Minor, v.err = toInt(in)
+}
+
+func (v *Version) patch(in string) {
+	if v.err != nil {
+		return
+	}
+	v.Patch, v.err = toInt(in)
+}
+
+func New(in string) (*Version, error) {
+	sp := strings.Split(in, ".")
+	if len(sp) != 3 {
+		return nil, errors.Errorf("passed string is not following to semver: %s", in)
 	}
 
-	const msg = "failed to parse string as int"
-	major, err := strconv.ParseInt(sp[0], 10, 32)
-	if err != nil {
-		return nil, errors.Wrapf(err, msg)
-	}
-	minor, err := strconv.ParseInt(sp[1], 10, 32)
-	if err != nil {
-		return nil, errors.Wrapf(err, msg)
-	}
-	patch, err := strconv.ParseInt(sp[2], 10, 32)
-	if err != nil {
-		return nil, errors.Wrapf(err, msg)
-	}
-	return &Version{
-		Major: int(major),
-		Minor: int(minor),
-		Patch: int(patch),
-	}, nil
+	v := &Version{}
+	v.major(sp[0])
+	v.minor(sp[1])
+	v.patch(sp[2])
+
+	return v, v.err
 }
 
 func (v *Version) String() string {
-	return fmt.Sprintf("%s.%s.%s", v.Major, v.Minor, v.Patch)
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+}
+
+func toInt(in string) (int, error) {
+	n, err := strconv.ParseInt(in, 10, 32)
+	if err != nil {
+		return -1, errors.Wrapf(err, "failed to parse string as int: %s", err)
+	}
+	if n < 0 {
+		return -1, errors.New("version must not negative")
+	}
+	// e.g. 01
+	if len(in) > 1 && in[0] == '0' {
+		return -1, errors.New("version must not have zero as a prefix")
+	}
+	return int(n), nil
 }
