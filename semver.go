@@ -8,12 +8,34 @@ import (
 	"github.com/pkg/errors"
 )
 
+type VersionType int
+
+const (
+	VersionTypeMajor = iota
+	VersionTypeMinor
+	VersionTypePatch
+)
+
 type Version struct {
 	Major, Minor, Patch int
 	err                 error
 }
 
-func (v *Version) Err() error {
+func (v *Version) Bump(typ VersionType) {
+	switch typ {
+	case VersionTypeMajor:
+		v.Major++
+		v.Minor = 0
+		v.Patch = 0
+	case VersionTypeMinor:
+		v.Minor++
+		v.Patch = 0
+	case VersionTypePatch:
+		v.Patch++
+	}
+}
+
+func (v *Version) Error() error {
 	return v.err
 }
 

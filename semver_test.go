@@ -22,9 +22,9 @@ func TestSemVer(t *testing.T) {
 	for _, c := range cases {
 		v := New(c.version)
 		if c.hasErr {
-			assert.Error(t, v.Err())
+			assert.Error(t, v.Error())
 		} else {
-			assert.NoError(t, v.Err())
+			assert.NoError(t, v.Error())
 			assert.Equal(t, c.expected, v)
 		}
 	}
