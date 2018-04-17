@@ -44,6 +44,8 @@ func main() {
 		typ = semver.VersionTypeMinor
 	case "patch":
 		typ = semver.VersionTypePatch
+	case "show":
+		// do nothing
 	case "of":
 		if args[1] == "chicken" {
 			fmt.Println("見えないものを見ようとして望遠鏡を覗き込んだ")
@@ -73,9 +75,10 @@ func main() {
 		fatalf("semver.New expr not found")
 	}
 
-	var found bool
+	var lit *ast.BasicLit
 	ast.Inspect(f, func(n ast.Node) bool {
-		if found {
+		// found
+		if lit != nil {
 			return false
 		}
 
@@ -100,26 +103,36 @@ func main() {
 		}
 
 		// is string?
-		lit, ok := expr.Args[0].(*ast.BasicLit)
+		l, ok := expr.Args[0].(*ast.BasicLit)
 		if !ok {
 			// TODO: 変数を解釈する
 			fatalf("arg of semver.Parse must be string literal, passed %T", expr.Args[0])
 		}
 
-		if lit.Kind != token.STRING {
+		if l.Kind != token.STRING {
 			fatalf("arg of semver.Parse must be string literal, passed %T", lit.Kind)
 		}
 
-		// trim double-quotes
-		ver := semver.MustParse(lit.Value[1 : len(lit.Value)-1])
-
-		ver.Bump(typ)
-		lit.Value = fmt.Sprintf(`"%s"`, ver.String())
-
-		found = true
+		lit = l
 
 		return false
 	})
+
+	if lit == nil {
+		fatalf("not found")
+	}
+
+	// trim double-quotes
+	ver := semver.MustParse(lit.Value[1 : len(lit.Value)-1])
+
+	// if show command, only show current version
+	if args[0] == "show" {
+		fmt.Println(ver)
+		return
+	}
+
+	ver.Bump(typ)
+	lit.Value = fmt.Sprintf(`"%s"`, ver.String())
 
 	err = printer.Fprint(os.Stdout, fset, f)
 	if err != nil {
@@ -144,6 +157,7 @@ Commands:
 	major	bump up major version
 	minor	bump up minor version
 	patch	bump up patch version
+	show	show current version
 
 Options:
 `
