@@ -72,7 +72,7 @@ func main() {
 	}
 
 	if is == nil {
-		fatalf("semver.New expr not found")
+		fatalf("package %s not imported\n", pkg)
 	}
 
 	var lit *ast.BasicLit
@@ -97,6 +97,11 @@ func main() {
 		}
 
 		// semver expr
+
+		// Parse or MustParse?
+		if selExpr.Sel.Name != "MustParse" && selExpr.Sel.Name != "Parse" {
+			return true
+		}
 
 		if len(expr.Args) != 1 {
 			fatalf("number of semver.Parse args must be one")
