@@ -21,7 +21,7 @@ func TestSemVer(t *testing.T) {
 		{"0", nil, true},
 	}
 	for _, c := range cases {
-		v := New(c.version)
+		v := Parse(c.version)
 		if c.hasErr {
 			assert.Error(t, v.Error())
 		} else {
@@ -44,7 +44,7 @@ func TestSemVer_Bump(t *testing.T) {
 		{version: "0.1.9", bumped: "0.1.10", patch: true},
 	}
 	for _, c := range cases {
-		v := New(c.version)
+		v := Parse(c.version)
 		require.NoError(t, v.Error())
 		switch {
 		case c.major:

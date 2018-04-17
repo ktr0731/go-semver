@@ -17,34 +17,43 @@ var (
 
 	w = flag.Bool("write", false, "write to source")
 
-	major = flag.Bool("major", false, "bump major")
-	minor = flag.Bool("minor", false, "bump minor")
-	patch = flag.Bool("patch", false, "bump patch")
-
-	version = semver.New("0.1.0")
+	version = semver.MustParse("0.1.0")
 )
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), usageFormat, os.Args[0])
+		flag.PrintDefaults()
+	}
+}
 
 func main() {
 	flag.Parse()
 
+	if flag.NArg() != 2 {
+		exitWithUsage(1)
+	}
+
 	args := flag.Args()
 
-	if len(args) != 1 {
-		return
+	var typ semver.VersionType
+	switch args[0] {
+	case "major":
+		typ = semver.VersionTypeMajor
+	case "minor":
+		typ = semver.VersionTypeMinor
+	case "patch":
+		typ = semver.VersionTypePatch
+	default:
+		exitWithUsage(1)
 	}
 
-	if !*major && !*minor && !*patch {
-		fmt.Println("usage: bump -major")
-		return
-	}
-
-	fname := args[0]
+	fname := args[1]
 
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, fname, nil, parser.Mode(0))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+		fatalf("failed to parse file: %s", err)
 	}
 
 	var is *ast.ImportSpec
@@ -55,8 +64,7 @@ func main() {
 	}
 
 	if is == nil {
-		fmt.Fprintf(os.Stderr, "not found")
-		return
+		fatalf("semver.New expr not found")
 	}
 
 	var found bool
@@ -74,8 +82,6 @@ func main() {
 			return true
 		}
 
-		// ast.Print(fset, expr)
-
 		ident, ok := selExpr.X.(*ast.Ident)
 		if !ok || ident.Name != is.Name.Name {
 			return true
@@ -84,27 +90,24 @@ func main() {
 		// semver expr
 
 		if len(expr.Args) != 1 {
-			fatal("number of semver.New args must be one")
+			fatalf("number of semver.Parse args must be one")
 		}
 
 		// is string?
 		lit, ok := expr.Args[0].(*ast.BasicLit)
 		if !ok {
 			// TODO: 変数を解釈する
-			fatal("arg of semver.New must be string literal, passed arg is not BasicLit")
+			fatalf("arg of semver.Parse must be string literal, passed %T", expr.Args[0])
 		}
 
 		if lit.Kind != token.STRING {
-			fatal("arg of semver.New must be string literal")
+			fatalf("arg of semver.Parse must be string literal, passed %T", lit.Kind)
 		}
 
-		val := lit.Value[1 : len(lit.Value)-1]
-		ver := semver.New(val)
-		if ver.Error() != nil {
-			fatal(fmt.Sprintf("%s", ver.Error()))
-		}
+		// trim double-quotes
+		ver := semver.MustParse(lit.Value[1 : len(lit.Value)-1])
 
-		bump(ver)
+		ver.Bump(typ)
 		lit.Value = fmt.Sprintf(`"%s"`, ver.String())
 
 		found = true
@@ -114,22 +117,27 @@ func main() {
 
 	err = printer.Fprint(os.Stdout, fset, f)
 	if err != nil {
-		panic(err)
+		fatalf("failed to print fileset: %s", err)
 	}
 }
 
-func bump(v *semver.Version) {
-	switch {
-	case *major:
-		v.Bump(semver.VersionTypeMajor)
-	case *minor:
-		v.Bump(semver.VersionTypeMinor)
-	case *patch:
-		v.Bump(semver.VersionTypePatch)
-	}
+func exitWithUsage(status int) {
+	flag.Usage()
+	os.Exit(status)
 }
 
-func fatal(msg string) {
-	fmt.Fprintln(os.Stderr, msg)
+func fatalf(format string, a ...interface{}) {
+	fmt.Fprintf(flag.CommandLine.Output(), format+"\n", a...)
 	os.Exit(1)
 }
+
+const usageFormat = `
+Usage: %s [-w] <command> <filename>
+
+Commands:
+	major	bump up major version
+	minor	bump up minor version
+	patch	bump up patch version
+
+Options:
+`

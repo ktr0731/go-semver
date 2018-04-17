@@ -60,7 +60,15 @@ func (v *Version) patch(in string) {
 	v.Patch, v.err = toInt(in)
 }
 
-func New(in string) *Version {
+func MustParse(in string) *Version {
+	v := Parse(in)
+	if v.Error() != nil {
+		panic(v.Error())
+	}
+	return v
+}
+
+func Parse(in string) *Version {
 	v := &Version{}
 
 	sp := strings.Split(in, ".")
