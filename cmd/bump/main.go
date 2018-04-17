@@ -44,6 +44,12 @@ func main() {
 		typ = semver.VersionTypeMinor
 	case "patch":
 		typ = semver.VersionTypePatch
+	case "of":
+		if args[1] == "chicken" {
+			fmt.Println("見えないものを見ようとして望遠鏡を覗き込んだ")
+			return
+		}
+		exitWithUsage(1)
 	default:
 		exitWithUsage(1)
 	}
