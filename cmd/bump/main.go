@@ -15,7 +15,7 @@ import (
 var (
 	pkg = `"github.com/ktr0731/go-semver"`
 
-	w = flag.Bool("write", false, "write to source")
+	write = flag.Bool("write", false, "write to source")
 
 	version = semver.MustParse("0.1.0")
 )
@@ -139,7 +139,17 @@ func main() {
 	ver.Bump(typ)
 	lit.Value = fmt.Sprintf(`"%s"`, ver.String())
 
-	err = printer.Fprint(os.Stdout, fset, f)
+	out := os.Stdout
+	if *write {
+		f, err := os.Create(fname)
+		if err != nil {
+			fatalf("failed to write bumped source to file: %s", err)
+		}
+		defer f.Close()
+		out = f
+	}
+
+	err = printer.Fprint(out, fset, f)
 	if err != nil {
 		fatalf("failed to print fileset: %s", err)
 	}
