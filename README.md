@@ -11,13 +11,14 @@ import (
 	semver "github.com/ktr0731/go-semver"
 )
 
-var version = semver.New("0.1.1")
+var version = semver.MustParse("0.1.1")
 
 // something...
 ```
 
+if you want to write the result directly, use `-w` option.  
 ``` sh
-$ semver -minor main.go
+$ bump minor main.go
 
 package main
 
@@ -25,7 +26,7 @@ import (
 	semver "github.com/ktr0731/go-semver"
 )
 
-var version = semver.New("0.2.0")
+var version = semver.MustParse("0.2.0")
 
 // something...
 ```
@@ -40,13 +41,7 @@ import (
 	semver "github.com/ktr0731/go-semver"
 )
 
-var v = semver.New("0.1.1")
-
-func init() {
-	if v.Error() != nil {
-		panic(v.Error())
-	}
-}
+var v = semver.MustParse("0.1.1")
 
 func main() {
 	fmt.Printf("[%s] major: %d, minor: %d, patch: %d\n", v, v.Major, v.Minor, v.Patch)

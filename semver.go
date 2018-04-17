@@ -68,6 +68,8 @@ func MustParse(in string) *Version {
 	return v
 }
 
+// Parse parses passed string as a semantic version
+// if parsing will be failed, its error is stored to *Version.Error()
 func Parse(in string) *Version {
 	v := &Version{}
 

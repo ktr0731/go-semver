@@ -15,7 +15,7 @@ import (
 var (
 	pkg = `"github.com/ktr0731/go-semver"`
 
-	write = flag.Bool("write", false, "write to source")
+	write = flag.Bool("w", false, "write to source")
 
 	version = semver.MustParse("0.1.0")
 )
