@@ -35,6 +35,44 @@ func (v *Version) Bump(typ VersionType) {
 	}
 }
 
+func (v *Version) Compare(v2 *Version) int {
+	if v.String() == v2.String() {
+		return 0
+	}
+
+	// major
+	if v.Major < v2.Major {
+		return -1
+	} else if v.Major > v2.Minor {
+		return 1
+	}
+
+	// minor
+	if v.Minor < v2.Minor {
+		return -1
+	} else if v.Minor > v2.Minor {
+		return 1
+	}
+
+	// patch
+	if v.Patch < v2.Patch {
+		return -1
+	}
+	return 1
+}
+
+func (v *Version) Equal(v2 *Version) bool {
+	return v.Compare(v2) == 0
+}
+
+func (v *Version) LessThan(v2 *Version) bool {
+	return v.Compare(v2) == -1
+}
+
+func (v *Version) GreaterThan(v2 *Version) bool {
+	return v.Compare(v2) == 1
+}
+
 func (v *Version) Error() error {
 	return v.err
 }

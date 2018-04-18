@@ -31,6 +31,57 @@ func TestSemVer(t *testing.T) {
 	}
 }
 
+func TestSemVer_Equal(t *testing.T) {
+	cases := []struct {
+		v1, v2 string
+		equal  bool
+	}{
+		{"0.0.1", "0.0.1", true},
+		{"0.0.1", "0.1.0", false},
+		{"0.0.1", "1.0.0", false},
+	}
+	for _, c := range cases {
+		v1, v2 := MustParse(c.v1), MustParse(c.v2)
+		assert.Equal(t, v1.Equal(v2), c.equal)
+	}
+}
+
+func TestSemVer_LessThan(t *testing.T) {
+	cases := []struct {
+		v1, v2   string
+		lessThan bool
+	}{
+		{"1.0.0", "0.0.1", false},
+		{"0.1.0", "0.0.1", false},
+		{"0.0.1", "0.0.1", false},
+		{"0.0.1", "0.0.2", true},
+		{"0.0.1", "0.1.0", true},
+		{"0.0.1", "1.0.0", true},
+	}
+	for _, c := range cases {
+		v1, v2 := MustParse(c.v1), MustParse(c.v2)
+		assert.Equal(t, v1.LessThan(v2), c.lessThan)
+	}
+}
+
+func TestSemVer_GreaterThan(t *testing.T) {
+	cases := []struct {
+		v1, v2      string
+		greaterThan bool
+	}{
+		{"1.0.0", "0.0.1", true},
+		{"0.1.0", "0.0.1", true},
+		{"0.0.2", "0.0.1", true},
+		{"0.0.1", "0.0.1", false},
+		{"0.0.1", "0.1.0", false},
+		{"0.0.1", "1.0.0", false},
+	}
+	for _, c := range cases {
+		v1, v2 := MustParse(c.v1), MustParse(c.v2)
+		assert.Equal(t, v1.GreaterThan(v2), c.greaterThan)
+	}
+}
+
 func TestSemVer_Bump(t *testing.T) {
 	cases := []struct {
 		version string
