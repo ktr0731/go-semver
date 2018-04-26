@@ -8,6 +8,7 @@ import (
 	"go/printer"
 	"go/token"
 	"os"
+	"strconv"
 
 	semver "github.com/ktr0731/go-semver"
 )
@@ -128,7 +129,11 @@ func main() {
 	}
 
 	// trim double-quotes
-	ver := semver.MustParse(lit.Value[1 : len(lit.Value)-1])
+	sv, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		fatalf("failed to unquote literal: %s", err)
+	}
+	ver := semver.MustParse(sv)
 
 	// if show command, only show current version
 	if args[0] == "show" {
@@ -137,7 +142,7 @@ func main() {
 	}
 
 	ver.Bump(typ)
-	lit.Value = fmt.Sprintf(`"%s"`, ver.String())
+	lit.Value = strconv.Quote(ver.String())
 
 	out := os.Stdout
 	if *write {
@@ -149,7 +154,11 @@ func main() {
 		out = f
 	}
 
-	err = printer.Fprint(out, fset, f)
+	p := &printer.Config{
+		Mode:     printer.UseSpaces | printer.TabIndent,
+		Tabwidth: 8,
+	}
+	err = p.Fprint(out, fset, f)
 	if err != nil {
 		fatalf("failed to print fileset: %s", err)
 	}
