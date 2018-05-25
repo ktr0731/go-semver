@@ -7,10 +7,12 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"log"
 	"os"
 	"strconv"
 
 	semver "github.com/ktr0731/go-semver"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -76,7 +78,7 @@ func main() {
 		fatalf("package %s not imported\n", pkg)
 	}
 
-	var lit *ast.BasicLit
+	var lit ast.Expr
 	ast.Inspect(f, func(n ast.Node) bool {
 		// found
 		if lit != nil {
@@ -99,6 +101,8 @@ func main() {
 
 		// semver expr
 
+		ast.Print(fset, expr.Args)
+
 		// Parse or MustParse?
 		if selExpr.Sel.Name != "MustParse" && selExpr.Sel.Name != "Parse" {
 			return true
@@ -108,18 +112,12 @@ func main() {
 			fatalf("number of semver.Parse args must be one")
 		}
 
-		// is string?
-		l, ok := expr.Args[0].(*ast.BasicLit)
-		if !ok {
-			// TODO: 変数を解釈する
-			fatalf("arg of semver.Parse must be string literal, passed %T", expr.Args[0])
+		var err error
+		lit, err = extractString(expr.Args[0])
+		if err != nil {
+			log.Println(err)
+			return true
 		}
-
-		if l.Kind != token.STRING {
-			fatalf("arg of semver.Parse must be string literal, passed %T", lit.Kind)
-		}
-
-		lit = l
 
 		return false
 	})
@@ -128,12 +126,16 @@ func main() {
 		fatalf("not found")
 	}
 
-	// trim double-quotes
-	sv, err := strconv.Unquote(lit.Value)
-	if err != nil {
-		fatalf("failed to unquote literal: %s", err)
+	var ver *semver.Version
+	switch l := lit.(type) {
+	case *ast.BasicLit:
+		ver, err = processBasicLit(l)
+	default:
+		panic("not supported")
 	}
-	ver := semver.MustParse(sv)
+	if err != nil {
+		fatalf("failed to process expr: %s", err)
+	}
 
 	// if show command, only show current version
 	if args[0] == "show" {
@@ -142,7 +144,6 @@ func main() {
 	}
 
 	ver.Bump(typ)
-	lit.Value = strconv.Quote(ver.String())
 
 	out := os.Stdout
 	if *write {
@@ -162,6 +163,30 @@ func main() {
 	if err != nil {
 		fatalf("failed to print fileset: %s", err)
 	}
+}
+
+func processBasicLit(l *ast.BasicLit) (*semver.Version, error) {
+	// trim double-quotes
+	sv, err := strconv.Unquote(l.Value)
+	if err != nil {
+		return nil, errors.Errorf("failed to unquote literal: %s", err)
+	}
+	ver := semver.MustParse(sv)
+	l.Value = strconv.Quote(ver.String())
+	return ver, nil
+}
+
+func extractString(e ast.Expr) (ast.Expr, error) {
+	l, ok := e.(*ast.BasicLit)
+	if !ok {
+		// TODO: 変数を解釈する
+		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", e)
+	}
+
+	if l.Kind != token.STRING {
+		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", l.Kind)
+	}
+	return l, nil
 }
 
 func exitWithUsage(status int) {
