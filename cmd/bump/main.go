@@ -7,7 +7,6 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"log"
 	"os"
 	"strconv"
 
@@ -101,8 +100,6 @@ func main() {
 
 		// semver expr
 
-		ast.Print(fset, expr.Args)
-
 		// Parse or MustParse?
 		if selExpr.Sel.Name != "MustParse" && selExpr.Sel.Name != "Parse" {
 			return true
@@ -112,12 +109,7 @@ func main() {
 			fatalf("number of semver.Parse args must be one")
 		}
 
-		var err error
-		lit, err = extractString(expr.Args[0])
-		if err != nil {
-			log.Println(err)
-			return true
-		}
+		lit = expr.Args[0]
 
 		return false
 	})
@@ -126,13 +118,7 @@ func main() {
 		fatalf("not found")
 	}
 
-	var ver *semver.Version
-	switch l := lit.(type) {
-	case *ast.BasicLit:
-		ver, err = processBasicLit(l)
-	default:
-		panic("not supported")
-	}
+	ver, err := processExpr(lit)
 	if err != nil {
 		fatalf("failed to process expr: %s", err)
 	}
@@ -165,28 +151,44 @@ func main() {
 	}
 }
 
+func processExpr(e ast.Expr) (ver *semver.Version, err error) {
+	switch l := e.(type) {
+	case *ast.BasicLit:
+		ver, err = processBasicLit(l)
+	case *ast.Ident:
+		ver, err = processObject(l.Obj)
+	default:
+		panic("not supported")
+	}
+	return
+}
+
 func processBasicLit(l *ast.BasicLit) (*semver.Version, error) {
+	if l.Kind != token.STRING {
+		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", l.Kind)
+	}
+
 	// trim double-quotes
 	sv, err := strconv.Unquote(l.Value)
 	if err != nil {
 		return nil, errors.Errorf("failed to unquote literal: %s", err)
 	}
-	ver := semver.MustParse(sv)
+	ver := semver.Parse(sv)
 	l.Value = strconv.Quote(ver.String())
-	return ver, nil
+	return ver, ver.Error()
 }
 
-func extractString(e ast.Expr) (ast.Expr, error) {
-	l, ok := e.(*ast.BasicLit)
-	if !ok {
-		// TODO: 変数を解釈する
-		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", e)
+func processObject(o *ast.Object) (*semver.Version, error) {
+	switch s := o.Decl.(type) {
+	case *ast.ValueSpec:
+		if len(s.Values) != 1 {
+			return nil, errors.Errorf("expect just one value, actual %d", len(s.Values))
+		}
+		return processExpr(s.Values[0])
+	default:
+		return nil, errors.Errorf("unsupported type %T", s)
 	}
-
-	if l.Kind != token.STRING {
-		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", l.Kind)
-	}
-	return l, nil
+	return nil, errors.Errorf("unsupported type %s", o.Kind)
 }
 
 func exitWithUsage(status int) {
