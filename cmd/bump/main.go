@@ -7,6 +7,8 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 
@@ -17,7 +19,8 @@ import (
 var (
 	pkg = `"github.com/ktr0731/go-semver"`
 
-	write = flag.Bool("w", false, "write to source")
+	write   = flag.Bool("w", false, "write to source")
+	verbose = flag.Bool("v", false, "verbose output")
 
 	version = semver.MustParse("0.1.0")
 )
@@ -31,6 +34,8 @@ func init() {
 
 func main() {
 	flag.Parse()
+
+	logger := newLogger(*verbose)
 
 	if flag.NArg() != 2 {
 		exitWithUsage(1)
@@ -59,6 +64,7 @@ func main() {
 	}
 
 	fname := args[1]
+	logger.Printf("target file: %s\n", fname)
 
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, fname, nil, parser.Mode(0))
@@ -77,7 +83,7 @@ func main() {
 		fatalf("package %s not imported\n", pkg)
 	}
 
-	var lit ast.Expr
+	var lit *ast.BasicLit
 	ast.Inspect(f, func(n ast.Node) bool {
 		// found
 		if lit != nil {
@@ -109,7 +115,11 @@ func main() {
 			fatalf("number of semver.Parse args must be one")
 		}
 
-		lit = expr.Args[0]
+		if blit, ok := expr.Args[0].(*ast.BasicLit); ok {
+			lit = blit
+		} else {
+			fatalf("semver.Parse's first argument must be a string literal")
+		}
 
 		return false
 	})
@@ -123,6 +133,8 @@ func main() {
 		fatalf("failed to process expr: %s", err)
 	}
 
+	logger.Printf("current version found: %s\n", ver)
+
 	// if show command, only show current version
 	if args[0] == "show" {
 		fmt.Println(ver)
@@ -130,6 +142,7 @@ func main() {
 	}
 
 	ver.Bump(typ)
+	logger.Printf("next version: %s\n", ver)
 
 	out := os.Stdout
 	if *write {
@@ -141,6 +154,9 @@ func main() {
 		out = f
 	}
 
+	lit.Value = ver.String()
+
+	logger.Println("update source")
 	p := &printer.Config{
 		Mode:     printer.UseSpaces | printer.TabIndent,
 		Tabwidth: 8,
@@ -199,6 +215,13 @@ func exitWithUsage(status int) {
 func fatalf(format string, a ...interface{}) {
 	fmt.Fprintf(flag.CommandLine.Output(), format+"\n", a...)
 	os.Exit(1)
+}
+
+func newLogger(verbose bool) *log.Logger {
+	if verbose {
+		return log.New(os.Stderr, "[bump] ", log.LstdFlags|log.Lshortfile)
+	}
+	return log.New(ioutil.Discard, "", log.LstdFlags)
 }
 
 const usageFormat = `
