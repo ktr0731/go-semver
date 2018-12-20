@@ -29,7 +29,8 @@ var (
 type bumpType int
 
 const (
-	bumpTypeMajor bumpType = iota
+	bumpTypeUnknown bumpType = iota
+	bumpTypeMajor
 	bumpTypeMinor
 	bumpTypePatch
 	bumpTypeNoop // Used to show the current version.
@@ -93,17 +94,17 @@ func main() {
 	realMain(args[0] == "show", fset, f, typ, out)
 }
 
-func realMain(show bool, fset *token.FileSet, f *ast.File, typ bumpType, w io.Writer) {
+func realMain(show bool, fset *token.FileSet, f *ast.File, typ bumpType, w io.Writer) error {
 	logger := newLogger(*verbose)
 
-	lit := findVersionBasicLit(fset, f)
-	if lit == nil {
-		fatalf("not found")
+	expr, err := findVersionExpr(fset, f)
+	if err != nil {
+		return err
 	}
 
-	ver, err := processExpr(lit, typ)
+	ver, err := processExpr(expr, typ)
 	if err != nil {
-		fatalf("failed to process expr: %s", err)
+		return errors.Wrap(err, "failed to process expr")
 	}
 
 	logger.Printf("current version found: %s\n", ver)
@@ -112,7 +113,7 @@ func realMain(show bool, fset *token.FileSet, f *ast.File, typ bumpType, w io.Wr
 	// It is equal to the current version.
 	if show {
 		fmt.Fprintln(w, ver)
-		return
+		return nil
 	}
 
 	p := &printer.Config{
@@ -121,14 +122,15 @@ func realMain(show bool, fset *token.FileSet, f *ast.File, typ bumpType, w io.Wr
 	}
 	err = p.Fprint(w, fset, f)
 	if err != nil {
-		fatalf("failed to print fileset: %s", err)
+		return errors.Wrap(err, "failed to print fileset")
 	}
+	return nil
 }
 
-// findVersionBasicLit finds an *ast.BasicLit that contains version string
+// findVersionExpr finds an ast.Expr that contains version string
 // such that `semver.MustParse("0.3.4")`.
-// If it is not found, findVersionBasicLit returns nil.
-func findVersionBasicLit(fset *token.FileSet, f *ast.File) *ast.BasicLit {
+// If it is not found, findVersionExpr returns nil.
+func findVersionExpr(fset *token.FileSet, f *ast.File) (ast.Expr, error) {
 	var is *ast.ImportSpec
 	for _, i := range f.Imports {
 		if i.Path.Value == pkg {
@@ -137,13 +139,14 @@ func findVersionBasicLit(fset *token.FileSet, f *ast.File) *ast.BasicLit {
 	}
 
 	if is == nil {
-		fatalf("package %s not imported\n", pkg)
+		return nil, errors.Errorf("package %s not imported\n", pkg)
 	}
 
-	var lit *ast.BasicLit
+	var targetExpr ast.Expr
+	var err error
 	ast.Inspect(f, func(n ast.Node) bool {
 		// found
-		if lit != nil {
+		if targetExpr != nil {
 			return false
 		}
 
@@ -169,18 +172,21 @@ func findVersionBasicLit(fset *token.FileSet, f *ast.File) *ast.BasicLit {
 		}
 
 		if len(expr.Args) != 1 {
-			fatalf("number of semver.Parse args must be one")
+			err = errors.New("number of semver.Parse args must be one")
+			return false
 		}
 
-		if blit, ok := expr.Args[0].(*ast.BasicLit); ok {
-			lit = blit
-		} else {
-			fatalf("semver.Parse's first argument must be a string literal")
-		}
+		targetExpr = expr.Args[0]
 
 		return false
 	})
-	return lit
+	if err != nil {
+		return nil, err
+	}
+	if targetExpr == nil {
+		return nil, errors.New("version not found")
+	}
+	return targetExpr, nil
 }
 
 func processExpr(e ast.Expr, typ bumpType) (ver *semver.Version, err error) {
@@ -219,6 +225,8 @@ func processBasicLit(l *ast.BasicLit, typ bumpType) (*semver.Version, error) {
 		ver.Bump(semver.VersionTypePatch)
 	case bumpTypeNoop:
 		// No-op
+	case bumpTypeUnknown:
+		panic("unknown type passed, uninitialized?")
 	default:
 		panic(fmt.Sprintf("unknown type: %d", typ))
 	}
