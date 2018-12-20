@@ -7,22 +7,32 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
 
+	"github.com/ktr0731/dept/logger"
 	semver "github.com/ktr0731/go-semver"
 	"github.com/pkg/errors"
 )
 
 var (
-	pkg = `"github.com/ktr0731/go-semver"`
-
+	pkg     = `"github.com/ktr0731/go-semver"`
 	write   = flag.Bool("w", false, "write to source")
 	verbose = flag.Bool("v", false, "verbose output")
 
 	version = semver.MustParse("0.1.0")
+)
+
+type bumpType int
+
+const (
+	bumpTypeMajor bumpType = iota
+	bumpTypeMinor
+	bumpTypePatch
+	bumpTypeNoop // Used to show the current version.
 )
 
 func init() {
@@ -35,24 +45,22 @@ func init() {
 func main() {
 	flag.Parse()
 
-	logger := newLogger(*verbose)
-
 	if flag.NArg() != 2 {
 		exitWithUsage(1)
 	}
 
 	args := flag.Args()
 
-	var typ semver.VersionType
+	var typ bumpType
 	switch args[0] {
 	case "major":
-		typ = semver.VersionTypeMajor
+		typ = bumpTypeMajor
 	case "minor":
-		typ = semver.VersionTypeMinor
+		typ = bumpTypeMinor
 	case "patch":
-		typ = semver.VersionTypePatch
+		typ = bumpTypePatch
 	case "show":
-		// do nothing
+		typ = bumpTypeNoop
 	case "of":
 		if args[1] == "chicken" {
 			fmt.Println("見えないものを見ようとして望遠鏡を覗き込んだ")
@@ -72,6 +80,55 @@ func main() {
 		fatalf("failed to parse file: %s", err)
 	}
 
+	out := os.Stdout
+	if *write {
+		f, err := os.Create(fname)
+		if err != nil {
+			fatalf("failed to write bumped source to file: %s", err)
+		}
+		defer f.Close()
+		out = f
+	}
+
+	realMain(args[0] == "show", fset, f, typ, out)
+}
+
+func realMain(show bool, fset *token.FileSet, f *ast.File, typ bumpType, w io.Writer) {
+	logger := newLogger(*verbose)
+
+	lit := findVersionBasicLit(fset, f)
+	if lit == nil {
+		fatalf("not found")
+	}
+
+	ver, err := processExpr(lit, typ)
+	if err != nil {
+		fatalf("failed to process expr: %s", err)
+	}
+
+	logger.Printf("current version found: %s\n", ver)
+
+	// If show command, show returned version.
+	// It is equal to the current version.
+	if show {
+		fmt.Fprintln(w, ver)
+		return
+	}
+
+	p := &printer.Config{
+		Mode:     printer.UseSpaces | printer.TabIndent,
+		Tabwidth: 8,
+	}
+	err = p.Fprint(w, fset, f)
+	if err != nil {
+		fatalf("failed to print fileset: %s", err)
+	}
+}
+
+// findVersionBasicLit finds an *ast.BasicLit that contains version string
+// such that `semver.MustParse("0.3.4")`.
+// If it is not found, findVersionBasicLit returns nil.
+func findVersionBasicLit(fset *token.FileSet, f *ast.File) *ast.BasicLit {
 	var is *ast.ImportSpec
 	for _, i := range f.Imports {
 		if i.Path.Value == pkg {
@@ -123,63 +180,22 @@ func main() {
 
 		return false
 	})
-
-	if lit == nil {
-		fatalf("not found")
-	}
-
-	ver, err := processExpr(lit)
-	if err != nil {
-		fatalf("failed to process expr: %s", err)
-	}
-
-	logger.Printf("current version found: %s\n", ver)
-
-	// if show command, only show current version
-	if args[0] == "show" {
-		fmt.Println(ver)
-		return
-	}
-
-	ver.Bump(typ)
-	logger.Printf("next version: %s\n", ver)
-
-	out := os.Stdout
-	if *write {
-		f, err := os.Create(fname)
-		if err != nil {
-			fatalf("failed to write bumped source to file: %s", err)
-		}
-		defer f.Close()
-		out = f
-	}
-
-	lit.Value = strconv.Quote(ver.String())
-
-	logger.Println("update source")
-	p := &printer.Config{
-		Mode:     printer.UseSpaces | printer.TabIndent,
-		Tabwidth: 8,
-	}
-	err = p.Fprint(out, fset, f)
-	if err != nil {
-		fatalf("failed to print fileset: %s", err)
-	}
+	return lit
 }
 
-func processExpr(e ast.Expr) (ver *semver.Version, err error) {
+func processExpr(e ast.Expr, typ bumpType) (ver *semver.Version, err error) {
 	switch l := e.(type) {
 	case *ast.BasicLit:
-		ver, err = processBasicLit(l)
+		ver, err = processBasicLit(l, typ)
 	case *ast.Ident:
-		ver, err = processObject(l.Obj)
+		ver, err = processObject(l.Obj, typ)
 	default:
 		panic("not supported")
 	}
 	return
 }
 
-func processBasicLit(l *ast.BasicLit) (*semver.Version, error) {
+func processBasicLit(l *ast.BasicLit, typ bumpType) (*semver.Version, error) {
 	if l.Kind != token.STRING {
 		return nil, errors.Errorf("arg of semver.Parse must be string literal, passed %T", l.Kind)
 	}
@@ -190,16 +206,35 @@ func processBasicLit(l *ast.BasicLit) (*semver.Version, error) {
 		return nil, errors.Errorf("failed to unquote literal: %s", err)
 	}
 	ver := semver.Parse(sv)
-	return ver, ver.Error()
+	if err := ver.Error(); err != nil {
+		return nil, err
+	}
+
+	switch typ {
+	case bumpTypeMajor:
+		ver.Bump(semver.VersionTypeMajor)
+	case bumpTypeMinor:
+		ver.Bump(semver.VersionTypeMinor)
+	case bumpTypePatch:
+		ver.Bump(semver.VersionTypePatch)
+	case bumpTypeNoop:
+		// No-op
+	default:
+		panic(fmt.Sprintf("unknown type: %d", typ))
+	}
+
+	l.Value = strconv.Quote(ver.String())
+
+	return ver, nil
 }
 
-func processObject(o *ast.Object) (*semver.Version, error) {
+func processObject(o *ast.Object, typ bumpType) (*semver.Version, error) {
 	switch s := o.Decl.(type) {
 	case *ast.ValueSpec:
 		if len(s.Values) != 1 {
 			return nil, errors.Errorf("expect just one value, actual %d", len(s.Values))
 		}
-		return processExpr(s.Values[0])
+		return processExpr(s.Values[0], typ)
 	default:
 		return nil, errors.Errorf("unsupported type %T", s)
 	}
