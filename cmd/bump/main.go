@@ -154,7 +154,7 @@ func main() {
 		out = f
 	}
 
-	lit.Value = ver.String()
+	lit.Value = strconv.Quote(ver.String())
 
 	logger.Println("update source")
 	p := &printer.Config{
@@ -190,7 +190,6 @@ func processBasicLit(l *ast.BasicLit) (*semver.Version, error) {
 		return nil, errors.Errorf("failed to unquote literal: %s", err)
 	}
 	ver := semver.Parse(sv)
-	l.Value = strconv.Quote(ver.String())
 	return ver, ver.Error()
 }
 
