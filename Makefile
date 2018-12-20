@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: build
-build: deps
+build:
 	go build ./...
 
 .PHONY: test
