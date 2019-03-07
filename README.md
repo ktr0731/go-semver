@@ -2,6 +2,10 @@
 [![GoDoc](https://godoc.org/github.com/ktr0731/go-semver?status.svg)](https://godoc.org/github.com/ktr0731/go-semver)
 [![CircleCI](https://circleci.com/gh/ktr0731/go-semver.svg?style=svg)](https://circleci.com/gh/ktr0731/go-semver)  
 
+** THIS REPOSITORY IS NO LONGER MAINTAINED **
+
+Please use [ktr0731/bump](https://github.com/ktr0731/bump) for alternative of cmd/bump.
+
 ## Usage
 
 ### from command-line
